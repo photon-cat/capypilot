@@ -18,6 +18,43 @@ Vehicle-specific notes, module inventory, and the on-car validation plan for the
   `pcmCruise = False`; engage via cruise stalk buttons; sends the same gas/regen + friction brake
   commands as a camera-ACC Bolt EUV. Safety param `HW_CAM | HW_CAM_LONG | NON_ACC | EV`.
 
+## CAN bus topology — DIFFERS from the ACC car (verify before any on-car test)
+
+openpilot's GM camera integration is written for the **ACC Bolt EUV** layout:
+
+- Buses: `POWERTRAIN = 0`, `OBSTACLE = 1`, `CAMERA = CHASSIS = 2`.
+- Splices at the camera with a **relay** separating the camera (bus 2) from the car (bus 0); blocks the
+  camera's `0x184`/LKAS and injects openpilot's own.
+- **All actuation goes out bus 0** (`0x180` steer, `0x2CB` gas, `0x315` brake); camera-side `0x184`/`0x1E1`
+  go out bus 2. The safety even asserts a relay (`0x180` on bus 0, `0x184` on bus 2).
+
+**Observed wiring difference (this is the "weird" part):**
+
+| | ACC car | Non-ACC car (this car) |
+|---|---|---|
+| Camera / ADAS path | routes **through the gateway (K56)** — standard 2-bus relay model | camera (B174W) sits **directly on the powertrain CAN bus** |
+
+Implications:
+- **Possibly simpler:** openpilot's commands on the powertrain bus reach K17/K20 **directly**, with no
+  gateway hop — good for the brake/gas experiment.
+- **But the stock bus/relay config may not match:** which bus carries `0x184` vs `0x180`, the forwarding,
+  and the relay-malfunction check all assume the ACC car's gateway-separated layout. If the camera is on the
+  powertrain bus here, the bus numbering the harness presents could differ — and that affects **even
+  lateral** (steering injected on the wrong bus won't work / trips relay malfunction).
+
+**Verify with a CAN dump on this car (all buses) before flashing** — confirm where each lands:
+
+| Message | Expected (ACC model) | Confirms |
+|---|---|---|
+| `0x184` PSCMStatus / LKAS (from camera) | bus 2 | camera side / relay point |
+| `0x180` ASCMLKASteeringCmd | bus 0 | steering target bus |
+| `0x3D1` (977) ECMCruiseControl | bus 0 (pt) | cruise-engage read |
+| `0x315` EBCMFrictionBrake (cmd/status) | bus 0 (pt) | **brake target bus** |
+| `0x2CB` ASCMGasRegenCmd | bus 0 (pt) | gas target bus |
+
+If the camera appears on the powertrain bus instead of a separate bus 2, the harness install point and the
+`networkLocation` / `disable_forwarding` / bus assignments likely need adjusting for this car.
+
 ## Longitudinal command architecture (who talks to whom)
 
 ```
