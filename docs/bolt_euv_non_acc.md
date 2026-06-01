@@ -38,58 +38,71 @@ openpilot (as K124_ASCM)
   routing/firewalling first.
 
 ### Core hypothesis being tested
-ACC vs non-ACC on the Bolt is a **K9 (BCM) configuration** difference, not different brake/gas actuator
-firmware. If **K17/K177/K20 run the same software as an ACC Bolt EUV**, the `0x315` and `0x2CB` commands
-should actuate identically. The CVN/software tables below are the reference to diff against a known-good
-ACC Bolt EUV.
+ACC vs non-ACC on the Bolt was assumed to be a **K9 (BCM) configuration** difference, not different
+brake/gas actuator firmware. The module diff below (non-ACC vs a known ACC Bolt EUV) **partially refines
+this**: the gateway, camera, and brake booster are byte-identical, but the EBCM (K17), which is the module
+that accepts `EBCMFrictionBrakeCmd` (0x315), is flashed differently. So brake acceptance is **test-gated,
+not assured** — the command *interface* may still be identical despite a different calibration, but it must
+be proven on-car (Phase 1).
 
-## Module software / calibration (reference VIN 1G1FY6S08N4120995)
+## Module software comparison: non-ACC vs ACC
 
-### K56 — Serial Data Gateway Module, Processor 1
-| Module Id | CVN | Selected Software |
-|---|---|---|
-| 00 | N/A | 13526568 |
-| 01 | 49C1 | 13536793 |
-| 02 | 8805 | 13518855 |
-| 03 | 46B1 | 13536797 |
-| 04 | AAA8 | 13530651 |
-| 05 | 46DC | 13526562 |
+- **Non-ACC reference:** `1G1FY6S08N4120995` — 2022 Bolt EUV LT, no ACC
+- **ACC reference:** `1G1FZ6S04N4126158` — 2022 Bolt EUV Premier, ACC w/ stop-go (RPO `KSG`)
 
-### K56 — Serial Data Gateway Module, Processor 2
-| Module Id | CVN | Selected Software |
-|---|---|---|
-| 00 | N/A | 13526569 |
-| 01 | 07F2 | 13536794 |
-| 02 | ADCD | 13518854 |
-| 03 | 044B | 13536799 |
-| 04 | 8B60 | 13530650 |
+### Identical across both cars ✅
+These modules carry the same Selected Software on both the non-ACC and ACC car:
 
-### B174W — Front View Camera (Windshield)
-| Module Id | CVN | Selected Software |
-|---|---|---|
-| 00 | N/A | 23509153 |
-| 01 | N/A | 42790953 |
-| 02 | 0814 | 42688815 |
+- **K56 — Serial Data Gateway (gateway):**
+  - P1: `13526568 / 13536793 / 13518855 / 13536797 / 13530651 / 13526562`
+  - P2: `13526569 / 13536794 / 13518854 / 13536799 / 13530650`
+- **B174W — Front View Camera:** `23509153 / 42790953 / 42688815`
+- **K177 — Brake Booster Control Module:** `42571218 / 42754357 / 42761398`
 
-### K17 — Electronic Brake Control Module (EBCM) — gates `0x315`
-| Module Id | CVN | Selected Software |
-|---|---|---|
-| 00 | N/A | 42793363 |
-| 01 | N/A | 42781130 |
-| 02 | N/A | 42693739 |
-| 03 | N/A | 42774925 |
-| 04 | N/A | 42708840 |
-| 05 | N/A | 42774926 |
+→ Routing (K56), camera integration (B174W), and brake execution (K177) are the same on both cars.
 
-### K177 — Brake Booster Control Module (downstream of K17)
-| Module Id | CVN | Selected Software |
-|---|---|---|
-| 00 | N/A | 42571218 |
-| 01 | 1537 | 42754357 |
-| 02 | 3904 | 42761398 |
+### K17 — Electronic Brake Control Module (EBCM) — DIFFERS ❌
+This is the module that gates `EBCMFrictionBrakeCmd` (0x315). All six partitions differ:
 
-> **TODO:** diff K17 / K177 / K20 software against a known-good ACC Bolt EUV. Match ⇒ strong evidence the
-> command path is identical and only K9 (BCM) config differs.
+| Module Id | non-ACC `…120995` | ACC `…126158` | Match |
+|---|---|---|---|
+| 00 | 42793363 | 42793362 | ✗ (off by 1) |
+| 01 | 42781130 | 42693738 | ✗ |
+| 02 | 42693739 | 42799962 | ✗ |
+| 03 | 42774925 | 42693744 | ✗ |
+| 04 | 42708840 | 42693746 | ✗ |
+| 05 | 42774926 | 42740374 | ✗ |
+
+→ The EBCM is **not** the same flash. Whether the non-ACC K17 still accepts the ASCM friction-brake
+command is the central on-car question. Module 00 differs by a single digit (likely calibration ID); the
+rest diverge more.
+
+> **TODO:** also pull **K20 (ECM)** software on both cars to compare the gas/regen (`0x2CB`) path — not yet
+> captured. And, if K17 rejects `0x315` on-car, the ACC K17 part numbers above document what a (heavy,
+> brake-module) reflash target would be — investigate feasibility/risk before ever attempting.
+
+## ACC car ADAS build (RPO) — for reference
+
+Selected active-safety / brake RPOs from the ACC reference `1G1FZ6S04N4126158` (the non-ACC car lacks the
+ACC-specific ones — no `KSG`, no following-distance/radar):
+
+| RPO | Meaning |
+|---|---|
+| `KSG` | Cruise control automatic, **adaptive, with stop/go** (the ACC) — *absent on non-ACC car* |
+| `UE4` | Sensor indicator following distance — *absent on non-ACC car* |
+| `UEU` | Forward collision alert |
+| `UHX` | Lane keep assist (LKAS) |
+| `UHY` | Low-speed collision imminent braking / **integrated brake assist** |
+| `UKC` | Side active safety obstacle detection (enhanced) |
+| `UKJ` | Pedestrian detection (front) |
+| `UFG` | Rear cross traffic alert |
+| `UV2` | 360 vision |
+| `UD7` | Park assist rear |
+| `J67` | Brake system power, frt & rr disc, ABS |
+| `J71` | Brake parking, power operated |
+| `JBJ` | Booster brake — none (no vacuum booster; electric/iBooster) |
+| `EPH` | Trans range selection, electronic |
+| `HPB` | Electrified propulsion, BEV, Gen 2, FWD |
 
 ## Module inventory (Bolt EUV catalog)
 
@@ -145,6 +158,14 @@ longitudinal (alpha)" enabled, safetyParam = `HW_CAM | HW_CAM_LONG | NON_ACC | E
 3. **Full model:** only after 1 & 2 pass — drop joystick mode, try real openpilot longitudinal at low
    speed with a lead.
 
-If commands don't reach K17/K20, suspect **K56 (SDGM)** routing. If K17 rejects `0x315`, that disproves the
-"same actuator firmware" theory for braking and the fallback is re-porting the comma pedal for throttle
-(braking still needs K17).
+Interpreting Phase 1:
+- **K56 (SDGM) is byte-identical to the ACC car**, so gateway routing is the *same* — a "command didn't
+  reach K17" failure is therefore less likely to be a gateway/firewall difference than a K17 difference.
+- **K17 (EBCM) is flashed differently** from the ACC car, so it is the prime suspect if `0x315` is ignored
+  or `FrictionBrakeUnavailable` asserts. That outcome would mean the non-ACC EBCM firmware doesn't accept
+  the ASCM friction-brake command — i.e. braking is not available without (heavy, risky) K17 reflash.
+- **K177 (booster) is identical**, so if K17 *does* accept the command, pressure execution should match the
+  ACC car.
+
+If K17 rejects `0x315`, the throttle side may still be salvageable independently (re-port the comma pedal
+for gas), but adaptive braking would be blocked until the K17 question is resolved.
