@@ -72,6 +72,7 @@ with `Authorization: JWT <token>`.
 | File downloads | `GET /v1/route/{route}/files` | ✅ |
 | **Prime (all features, ungated)** | device `prime:true` + `GET /v1/prime/subscription` | ✅ (free — no billing) |
 | **Navigation** | `POST /v1/navigation/{id}/set_destination`, `/next`, `/locations` | ✅ (sends destinations to the car) |
+| **Live device control** | `POST {ATHENA_URL}/{dongle_id}` JSON-RPC | ✅ (takeSnapshot, getNetworkType, getNetworks, reboot, … relayed to the car) |
 
 ## 4. Limitations / notes
 
@@ -87,6 +88,12 @@ with `Authorization: JWT <token>`.
   destination to pull on reconnect; favorites/recents persist via `locations`.
   (connect's web map itself is read-only — these endpoints serve the device and
   the comma mobile app.)
+- **Live device control** goes through the Athena service: connect/the mobile app
+  `POST {ATHENA_URL}/{dongle_id}` a JSON-RPC request and the backend relays it
+  over the device's WebSocket. The device's openpilot `athenad` implements the
+  methods (`takeSnapshot`, `getNetworkType`, `getNetworks`, `reboot`,
+  `listDataDirectory`, …) — the backend is a pass-through. If the device isn't
+  connected, the call returns a JSON-RPC error and connect shows it offline.
 - **Timeline events** (`events.json`) are served empty — the log parser doesn't
   extract alert/engagement events yet, so the scrubber has no event markers and
   video starts at offset 0. Map path and playback are unaffected.

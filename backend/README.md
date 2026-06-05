@@ -94,6 +94,10 @@ commaai/connect-facing (so the official connect web app works as the frontend):
 | GET    | `/v1/prime/subscription?dongle_id=`             | Active, free prime (ungated)     |
 | POST   | `/v1/navigation/{id}/set_destination`           | Send a destination to the car    |
 | GET/PUT| `/v1/navigation/{id}/next`, `/locations`        | Queued dest + saved favorites    |
+| POST   | `{ATHENA_HOST}/{dongle_id}` (athena:8001)       | JSON-RPC device control (relayed)|
+
+Live device control (snapshot, network info, reboot, …) is relayed to the
+connected device over its Athena WebSocket; see [CONNECT.md](CONNECT.md).
 
 Web UI JSON API is under `/api/*`; storage notifications hit `/internal/s3-event`.
 Full connect setup is in **[CONNECT.md](CONNECT.md)**.
@@ -105,7 +109,7 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt   # pycapnp needs the capnp compiler;
                                             # if it won't build locally, omit it —
                                             # only the ingest worker uses it.
-.venv/bin/python -m pytest tests/           # 32 tests; parser test runs where pycapnp is present
+.venv/bin/python -m pytest tests/           # 37 tests; parser test runs where pycapnp is present
 ```
 
 The Cap'n Proto schema is vendored under `schema/` so neither the openpilot
