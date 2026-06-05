@@ -69,6 +69,24 @@ docker compose cp api:/tmp/q.zst ./q.zst
 # -> registered ✓ / upload_url ✓ / uploaded ✓ / indexed ✓  SMOKE TEST PASSED
 ```
 
+### Full device simulation
+
+`scripts/simulate_device.py` simulates a complete comma device: it registers,
+holds an Athena WebSocket open, uploads a multi-segment drive, answers relayed
+remote commands (snapshot/network/reboot/listDataDirectory), performs a
+backend-requested `uploadFilesToUrls`, receives a live `setNavDestination` push,
+and sends stats/logs — then asserts the backend indexed and relayed everything.
+
+```bash
+docker compose exec api python scripts/provision_device.py make-qlog /tmp/q.zst
+docker compose cp api:/tmp/q.zst ./q.zst
+./.venv/bin/python scripts/simulate_device.py --qlog ./q.zst --segments 3
+# -> ... SIMULATED DEVICE SCENARIO PASSED
+```
+
+There are also focused checks: `scripts/verify_connect.py` (connect API +
+prime + nav) and `scripts/verify_device_control.py` (Athena JSON-RPC relay).
+
 ## Endpoints
 
 Device-facing (comma-compatible):
