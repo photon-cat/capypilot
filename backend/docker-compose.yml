@@ -1,0 +1,96 @@
+name: capypilot-backend
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-capy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-capy_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-capypilot}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-capy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # no host port: postgres is only reached on the internal network
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-capyminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-capyminio_dev_password}
+      # Webhook notification target -> ingest endpoint. queue_dir makes delivery
+      # async + store-and-forward so MinIO doesn't block startup on the API.
+      MINIO_NOTIFY_WEBHOOK_ENABLE_capy: "on"
+      MINIO_NOTIFY_WEBHOOK_ENDPOINT_capy: "http://api:8000/internal/s3-event"
+      # Allow the browser's HLS player (hls.js in connect) to fetch presigned
+      # qcamera .ts segments directly from MinIO across origins.
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+      MINIO_NOTIFY_WEBHOOK_QUEUE_DIR_capy: "/events"
+      MINIO_NOTIFY_WEBHOOK_QUEUE_LIMIT_capy: "100000"
+    volumes:
+      - miniodata:/data
+      - minioevents:/events
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "${MINIO_API_PORT:-9100}:9000"  # S3 API
+      - "${MINIO_CONSOLE_PORT:-9101}:9001"  # web console
+
+  createbuckets:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-capyminio} ${MINIO_ROOT_PASSWORD:-capyminio_dev_password} &&
+      mc mb --ignore-existing local/${S3_BUCKET:-capypilot-data} &&
+      mc event add --ignore-existing local/${S3_BUCKET:-capypilot-data} arn:minio:sqs::capy:webhook --event put &&
+      echo 'bucket + notifications ready';
+      "
+
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: >
+      /bin/sh -c "alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+
+  athena:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # ws-ping-interval keeps the device's 70s RECONNECT_TIMEOUT_S satisfied.
+    command: uvicorn app.athena.server:app --host 0.0.0.0 --port 8001 --ws-ping-interval 25 --ws-ping-timeout 20
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "8001:8001"
+
+volumes:
+  pgdata:
+  miniodata:
+  minioevents:
