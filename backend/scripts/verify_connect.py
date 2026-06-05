@@ -143,7 +143,40 @@ def run(api_host: str, qlog_path: str) -> int:
   assert bad.status_code == 403, f"expected 403 for bad sig, got {bad.status_code}"
   print(f"qcamera.m3u8 bad-sig -> 403 {OK}")
 
-  print("\nCONNECT COMPATIBILITY VERIFIED")
+  # ── prime (ungated): device reports prime + active subscription
+  assert dev["prime"] is True and dev["eligible_features"]["nav"] is True, dev
+  print(f"device prime={dev['prime']} nav={dev['eligible_features']['nav']} {OK}")
+  sub = s.get(f"{api_host}/v1/prime/subscription", params={"dongle_id": dongle_id}, timeout=15).json()
+  assert sub.get("user_id") and sub["amount"] == 0, sub
+  print(f"/v1/prime/subscription {OK} (active, ${sub['amount'] / 100:.2f}, plan={sub['plan']})")
+
+  # ── navigation: set a destination (device offline -> queued as "next")
+  dest = {"latitude": 32.7157, "longitude": -117.1611, "place_name": "1441 State St",
+          "place_details": "San Diego, CA 92101"}
+  sd = s.post(f"{api_host}/v1/navigation/{dongle_id}/set_destination", json=dest, timeout=15).json()
+  assert sd["success"] and sd["saved_next"] is True, sd
+  print(f"set_destination {OK} (queued: saved_next={sd['saved_next']})")
+
+  # device pulls its queued destination (device JWT, not the user token)
+  nxt = requests.get(f"{api_host}/v1/navigation/{dongle_id}/next", headers=auth, timeout=15).json()
+  assert nxt and nxt["place_name"] == dest["place_name"], nxt
+  print(f"navigation/next {OK} (got '{nxt['place_name']}')")
+  # next is one-shot: a second pull is empty
+  nxt2 = requests.get(f"{api_host}/v1/navigation/{dongle_id}/next", headers=auth, timeout=15).json()
+  assert nxt2 is None, f"expected null after consume, got {nxt2}"
+  print(f"navigation/next consumed -> null {OK}")
+
+  # saved locations: a "recent" was recorded by set_destination; add a favorite
+  put = s.put(f"{api_host}/v1/navigation/{dongle_id}/locations",
+              json={"latitude": 37.4, "longitude": -122.1, "place_name": "Home",
+                    "place_details": "", "save_type": "favorite", "label": "Home"}, timeout=15).json()
+  assert put["success"], put
+  locs = s.get(f"{api_host}/v1/navigation/{dongle_id}/locations", timeout=15).json()
+  types = {loc["save_type"] for loc in locs}
+  assert "favorite" in types and "recent" in types, types
+  print(f"navigation/locations {OK} ({len(locs)} saved: {sorted(types)})")
+
+  print("\nCONNECT COMPATIBILITY VERIFIED (incl. prime + navigation)")
   return 0
 
 

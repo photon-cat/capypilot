@@ -81,7 +81,13 @@ async def connect_me(user: User = Depends(current_user)) -> dict:
 
 # ── devices ──────────────────────────────────────────────────────────────────
 def _device_dict(d: Device, now: float) -> dict:
-  """Device object in connect's shape (see @commaai/api devices.js consumers)."""
+  """Device object in connect's shape (see @commaai/api devices.js consumers).
+
+  Every device is reported as a fully-subscribed prime device with navigation
+  enabled — this backend doesn't gate features behind billing. The fields that
+  unlock connect's prime/nav UI are `prime`, `prime_type`, `is_owner`, and
+  `eligible_features` (see app/routers/prime.py for the subscription object).
+  """
   last_ping = int(now) if d.is_online else (int(d.last_seen.timestamp()) if d.last_seen else 0)
   return {
     "dongle_id": d.dongle_id,
@@ -89,15 +95,17 @@ def _device_dict(d: Device, now: float) -> dict:
     "serial": d.serial,
     "device_type": d.device_type or "threex",
     "is_owner": True,
-    "prime": False,
-    "prime_type": 0,
+    "is_paired": True,
+    "prime": True,
+    "prime_type": 4,  # "Magenta New" — any non-zero value reads as active prime
+    "trial_claimed": True,
     "shared": False,
     "last_athena_ping": last_ping,
     "openpilot_version": d.openpilot_version,
     "network_metered": False,
-    "sim_id": None,
-    "trial_claimed": False,
-    "eligible_features": {"prime": False, "prime_data": False, "nav": False},
+    "sim_id": f"capy-{d.dongle_id}",
+    "commacare": False,
+    "eligible_features": {"prime": True, "prime_data": True, "nav": True, "commacare": False},
   }
 
 

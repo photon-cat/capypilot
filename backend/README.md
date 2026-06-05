@@ -91,6 +91,9 @@ commaai/connect-facing (so the official connect web app works as the frontend):
 | GET    | `/v1/devices/{id}/routes_segments`              | Drive list (connect's main feed) |
 | GET    | `/v1/route/{fullname}/qcamera.m3u8?exp=&sig=`   | HLS video (signed)               |
 | GET    | `/connect/files/{id}/{log}/{seg}/coords.json`   | Per-segment GPS path for the map |
+| GET    | `/v1/prime/subscription?dongle_id=`             | Active, free prime (ungated)     |
+| POST   | `/v1/navigation/{id}/set_destination`           | Send a destination to the car    |
+| GET/PUT| `/v1/navigation/{id}/next`, `/locations`        | Queued dest + saved favorites    |
 
 Web UI JSON API is under `/api/*`; storage notifications hit `/internal/s3-event`.
 Full connect setup is in **[CONNECT.md](CONNECT.md)**.
@@ -102,7 +105,7 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt   # pycapnp needs the capnp compiler;
                                             # if it won't build locally, omit it —
                                             # only the ingest worker uses it.
-.venv/bin/python -m pytest tests/           # 29 tests; parser test runs where pycapnp is present
+.venv/bin/python -m pytest tests/           # 32 tests; parser test runs where pycapnp is present
 ```
 
 The Cap'n Proto schema is vendored under `schema/` so neither the openpilot

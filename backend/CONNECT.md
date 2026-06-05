@@ -70,12 +70,23 @@ with `Authorization: JWT <token>`.
 | Map path | `{route.url}/{i}/coords.json` | ✅ (from indexed GPS) |
 | Video playback | `GET /v1/route/{fullname}/qcamera.m3u8` (HLS) | ✅ (needs qcamera uploaded) |
 | File downloads | `GET /v1/route/{route}/files` | ✅ |
+| **Prime (all features, ungated)** | device `prime:true` + `GET /v1/prime/subscription` | ✅ (free — no billing) |
+| **Navigation** | `POST /v1/navigation/{id}/set_destination`, `/next`, `/locations` | ✅ (sends destinations to the car) |
 
 ## 4. Limitations / notes
 
 - **OAuth providers** aren't self-hosted (see step 2). Token injection is the
   workaround; or fork my-comma-auth to point at your own OAuth apps + a
   `/v2/auth/{provider}/redirect/` you implement.
+- **Prime is ungated**: every device is reported as a fully-subscribed prime
+  device (`prime:true`, `prime_type:4`, `eligible_features.prime_data/nav`), and
+  `/v1/prime/subscription` returns an active **$0.00** subscription. There is no
+  billing — the stripe/cancel/subscribe_info endpoints are benign no-ops.
+- **Navigation** is fully implemented: `set_destination` pushes to a live device
+  over Athena (`setNavDestination`), or queues it as the device's `next`
+  destination to pull on reconnect; favorites/recents persist via `locations`.
+  (connect's web map itself is read-only — these endpoints serve the device and
+  the comma mobile app.)
 - **Timeline events** (`events.json`) are served empty — the log parser doesn't
   extract alert/engagement events yet, so the scrubber has no event markers and
   video starts at offset 0. Map path and playback are unaffected.

@@ -16,7 +16,7 @@ from .auth import hash_password
 from .config import get_settings
 from .db import SessionLocal
 from .models import User
-from .routers import connect, internal, pilotauth, routes, ui_api, upload
+from .routers import connect, internal, navigation, pilotauth, prime, routes, ui_api, upload
 from .storage import ensure_bucket
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -66,6 +66,8 @@ def create_app() -> FastAPI:
   app.include_router(routes.router)
   # commaai/connect compatibility layer
   app.include_router(connect.router)
+  app.include_router(prime.router)
+  app.include_router(navigation.router)
   # Web UI JSON API
   app.include_router(ui_api.router)
   # Internal (storage notifications)

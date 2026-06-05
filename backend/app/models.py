@@ -136,3 +136,39 @@ class User(Base):
   email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
   password_hash: Mapped[str] = mapped_column(String, nullable=False)
   created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class NavDestination(Base):
+  """The single pending "next" navigation destination for a device.
+
+  Set via `POST /v1/navigation/{id}/set_destination` when the device is offline
+  (when online we push it straight to the car over Athena instead). The device
+  pulls and clears it via `GET /v1/navigation/{id}/next`.
+  """
+  __tablename__ = "nav_destination"
+
+  dongle_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+  place_name: Mapped[str] = mapped_column(String, nullable=False)
+  place_details: Mapped[str | None] = mapped_column(String, nullable=True)
+  latitude: Mapped[float] = mapped_column(Float, nullable=False)
+  longitude: Mapped[float] = mapped_column(Float, nullable=False)
+  modified: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+  )
+
+
+class NavLocation(Base):
+  """A saved navigation location (favorites + recent destinations)."""
+  __tablename__ = "nav_location"
+
+  id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+  dongle_id: Mapped[str] = mapped_column(String(16), index=True, nullable=False)
+  save_type: Mapped[str] = mapped_column(String(16), nullable=False)  # favorite|recent|home|work
+  label: Mapped[str | None] = mapped_column(String, nullable=True)
+  place_name: Mapped[str] = mapped_column(String, nullable=False)
+  place_details: Mapped[str | None] = mapped_column(String, nullable=True)
+  latitude: Mapped[float] = mapped_column(Float, nullable=False)
+  longitude: Mapped[float] = mapped_column(Float, nullable=False)
+  modified: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+  )
